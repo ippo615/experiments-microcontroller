@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" >
+ <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="description" content="Goertzel Algorithm Simulation">
+    <meta name="author" content="Andrew Ippoliti">
+    <title>Goertzel Stuff</title>
+    <script language="javascript" type="text/javascript" src="./flot/jquery.js"></script>
+    <script language="javascript" type="text/javascript" src="./flot/jquery.flot.js"></script>
+	<script language="javascript" type="text/javascript" src="./jquery.flot.navigate.js"></script>
+	<style type="text/css">
+		#container {width: 640px; margin: auto; background-color: #FFF;}
+		body {background-color: #FFF; text-align: center;}
+	</style>
+ </head>
+    <body><div id="container">
+    <h1>Goertzel Demonstration</h1>
+
+	<div><label for="IN-SIGNAL">Signal:</label><textarea id="IN-SIGNAL">cos(2*PI*440*t)</textarea></div>
+	<div><label for="IN-SAMP-FREQ">Sampling Frequency (Hz):</label><input type="text" value="8000" id="IN-SAMP-FREQ"/></div>
+	<div><label for="IN-TEST-FREQ">Test Frequency (Hz):</label><input type="text" value="440" id="IN-TEST-FREQ"/></div>
+	<div><label for="IN-NUM-SAMP">Number of Samples:</label><input type="text" value="1660" id="IN-NUM-SAMP"/></div>
+	<div><button id="BT-UPDATE" style="width:100%;" onclick="UPDATE();">Update</button></div>
+	<H2>The time plot of the signal:</H2>
+    <div id="timeplot" style="width:480px;height:240px"></div>
+	<H2>The progression of the Goertzel Algorthim:</H2>
+	<div id="GoertzelRT" style="width:480px;height:240px"></div>
+
+	<div>Real Time, Low Memory Output Magnitude: <span id="OUT-RT-MAG"></span></div>
+	<div>The Block Goertzel Ouput Magnitude: <span id="OUT-BLOCK-MAG"></span></div>
+	</div>
+<script type="text/javascript">
+/* The following code is written by Andrew Ippoliti
+ * It depends on flot (not written by Andrew) for graphing
+*/
+function calcTime(signal,sampFreq,sampleCount){
+	var T = 1/sampFreq;
+	/* utility funcs */
+	var sin=Math.sin;
+	var cos=Math.cos;
+	var PI=Math.PI;
+	function u(t){return t>0};
+	function SqW(f,d,t){
+		var T = 1/f;
+		if((t%T)/T<d){
+			return 0.5;
+		}else{
+			return -0.5;
+		}
+	};
+	/* optimize function so it it "compiled" */
+	eval("var func = function(t){ return "+signal+";}");
+    var d1 = [];
+	var t=0;
+    for (var i = 0; i < sampleCount; i+=1){
+		t += T;
+        d1.push([t, func(t)]);
+	}
+	return d1;
+}
+/* GoertzelBlock - Applies Goertzel Algorithm to a Block of Data
+ * data is an array of [time,sample] pairs
+ * testFreq is the frequency that is being tested for
+ * sampleFreq is the rate at which the data was sampled
+ * procLen is the number of samples that should be processed */
+function GoertzelBlock(data, testFreq, sampleFreq, procLen) {
+	/* Z1 is the previous value, Z2 is the previous previous value
+	 * S is the current value, i is the iteration */
+	var Z1=0.0, Z2=0.0, S = 0.0, i = 0;
+	/* Compute the normalized frequency that we are looking for */
+	var nomFreq = testFreq / sampleFreq;
+	/* realW is the real part of the complex exponential */
+	var realW = 2*Math.cos(2*Math.PI*nomFreq);
+	/* imagW is the imaginary part of the complex exponential,
+	 * Note: imagW is not needed for the magnitude computation */
+	var imagW = 1*Math.sin(2*Math.PI*nomFreq);
+	/* iterate over all samples */
+	for (i=0; i<procLen; i++) {
+		S = data[i][1] + realW * Z1 - Z2; //calculate current
+		Z2 = Z1; //update previous previous
+		Z1 = S;  //update previous
+	}
+	/* Return the power, this isn't normalized so it can be rather high */
+	return Math.sqrt(Z2*Z2+Z1*Z1-realW*Z1*Z2);
+}
+function GenRTGF(data, testFreq, sampleFreq, procLen) {	
+	var Z1=0.0, Z2=0.0, S = 0.0, i = 0;
+	var nomFreq = testFreq / sampleFreq;
+	var realW = 2*Math.cos(2*Math.PI*nomFreq);
+	var imagW = 1*Math.sin(2*Math.PI*nomFreq);
+	/* power is the 'output' of the algorithm at a particular iteration */
+	var power = 0;
+	/* powTotal can be used to compute the acutal power in the signal
+	 * which can then be used to normalize the power computed */
+	var powTot = 0;
+	/* outData will store an array of [iteration, output] pairs so that
+	 * the data can be graphed, instead of just outputting the final value */
+	var outData = [];
+	for (i=0; i<procLen; i++) {
+		S = data[i][1] + realW * Z1 - Z2; //calculate current
+		Z2 = Z1; //update previous previous
+		Z1 = S;  //update previous
+		/* calculate the power */
+		power = Z2*Z2+Z1*Z1-realW*Z1*Z2;
+		/* increment total power */
+		powTot += data[i][1]*data[i][1];
+		/* add output to array */
+		outData.push([i,Math.sqrt(power)]);
+		/* for normailized power */
+		//power = Math.sqrt(power/(powTot*i));
+		//outData.push([i,power]);
+	}
+	/* Return the power, this isn't normalized so it can be rather high */
+	return outData;
+}
+
+
+function UPDATE(){
+	var signal = document.getElementById("IN-SIGNAL").value;
+	var sampleRate = parseInt(document.getElementById("IN-SAMP-FREQ").value);
+	var testFreq = parseInt(document.getElementById("IN-TEST-FREQ").value);
+	var sampleCount = parseInt(document.getElementById("IN-NUM-SAMP").value);
+	var timeData = calcTime(signal,sampleRate,sampleCount);
+	$.plot($("#timeplot"), [
+        {
+            data: timeData,
+			label: "Time Signal",
+			color: "#0000CC",
+            lines: { show: true, steps: true }
+        }
+    ]);
+	var gbOut = GoertzelBlock(timeData,testFreq,sampleRate,timeData.length);
+	document.getElementById("OUT-BLOCK-MAG").innerHTML = gbOut;
+	var gbRT = GenRTGF(timeData,testFreq,sampleRate,timeData.length);
+	document.getElementById("OUT-RT-MAG").innerHTML = gbRT[gbRT.length-1][1];
+	var gbRT1 = GenRTGF(timeData,testFreq*Math.pow(2, 1/12),sampleRate,timeData.length);
+	var gbRT2 = GenRTGF(timeData,testFreq*Math.pow(2,-1/12),sampleRate,timeData.length);
+	$.plot($("#GoertzelRT"), [
+		{
+            data: gbRT1,
+			label: "Half-Step Above: "+Math.round(testFreq*Math.pow(2,1/12))+"Hz",
+			color: "#CC0000",
+            lines: { show: true, steps: true }
+        },
+        {
+            data: gbRT,
+			label: "Test Frequency: "+testFreq+"Hz",
+			color: "#333333",
+            lines: { show: true, steps: true }
+        },
+		{
+            data: gbRT2,
+			label: "Half-Step Below: "+Math.round(testFreq*Math.pow(2,-1/12))+"Hz",
+			color: "#00CC00",
+            lines: { show: true, steps: true }
+        }],
+		{legend: { position: 'nw' }}
+    );
+}
+</script>
+
+</body>
+</html>

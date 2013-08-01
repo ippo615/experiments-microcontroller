@@ -1,0 +1,8 @@
+------------------------------  tone.pjt - Debug  ------------------------------
+[tone.c] "C:\CCStudio_v3.1\C6000\cgtools\bin\cl6x" -g -q -fr"./Debug" -i"." -i"C:/CCStudio_v3.1/c6000/dsk6713/include" -d"_DEBUG" -d"CHIP_6713" -ml3 -mv6710 -@"Debug.lkf" "tone.c"
+
+[Linking...] "C:\CCStudio_v3.1\C6000\cgtools\bin\cl6x" -@"Debug.lkf"
+<Linking>
+
+Build Complete,
+  0 Errors, 0 Warnings, 0 Remarks.
